@@ -60,6 +60,15 @@ unsigned long lastSensorRead = 0;
 unsigned long lastDebugOutput = 0;
 unsigned long lastButtonCheck = 0;
 
+// Add these constants near the top with other constants
+const int FAN_PIN = 13;  // Choose an available GPIO pin
+const int FAN_SPEED_MIN = 0;
+const int FAN_SPEED_MAX = 255;
+
+// Add these variables with other global variables
+int currentFanSpeed = 0;
+bool autoFanControl = true;
+
 void readBME280();
 void readPMSensor();
 void debugToSerial();
@@ -74,6 +83,9 @@ void handleButton();
 // Add these function declarations
 void debugBME280();
 void debugPMSensor();
+
+// Add this function declaration with others
+void updateFanSpeed();
 
 struct EnvironmentData
 {
@@ -125,6 +137,11 @@ void setup()
   pinMode(BUTTON_PIN, INPUT);
     
   lcd.backlight();  // Ensure backlight is on initially
+
+  // Add to setup() function after other pin setups
+  pinMode(FAN_PIN, OUTPUT);
+  ledcSetup(0, 25000, 8);  // Channel 0, 25kHz, 8-bit resolution
+  ledcAttachPin(FAN_PIN, 0);
 }
 
 // Modify loop() for non-blocking operation
@@ -142,6 +159,7 @@ void loop() {
         if (currentMillis - lastSensorRead >= SENSOR_READ_INTERVAL) {
             lastSensorRead = currentMillis;
             readData();
+            updateFanSpeed();  // Add this line
         }
         
         // Debug output with interval
@@ -344,6 +362,17 @@ void handleButton() {
 
 // Modify updateAirQualityLed to respect ledEnabled state
 void updateAirQualityLed() {
+    int pm25 = environmentData.pm2_5;
+    
+    // Auto-enable system if air quality is unhealthy
+    if (!systemEnabled && pm25 > PM25_BAD) {
+        systemEnabled = true;
+        displayEnabled = true;
+        ledEnabled = true;
+        lcd.backlight();
+        Serial.println("System auto-enabled due to poor air quality");
+    }
+    
     if (!ledEnabled) {
         // Turn off all LEDs (LOW for common cathode/active-high)
         digitalWrite(rgbLed[0], LOW);
@@ -351,8 +380,6 @@ void updateAirQualityLed() {
         digitalWrite(rgbLed[2], LOW);
         return;
     }
-    
-    int pm25 = environmentData.pm2_5;
     
     // Find which AQI range we're in
     int i = 0;
@@ -381,4 +408,28 @@ void updateAirQualityLed() {
     digitalWrite(rgbLed[0], (color.r > 128) ? HIGH : LOW);  // R
     digitalWrite(rgbLed[1], (color.g > 128) ? HIGH : LOW);  // G
     digitalWrite(rgbLed[2], (color.b > 128) ? HIGH : LOW);  // B
+}
+
+// Add this function to control fan speed based on air quality
+void updateFanSpeed() {
+    if (!systemEnabled || !autoFanControl) {
+        ledcWrite(0, 0);  // Turn off fan
+        return;
+    }
+
+    int pm25 = environmentData.pm2_5;
+    int newFanSpeed;
+    
+    if (pm25 <= PM25_GOOD) {
+        newFanSpeed = FAN_SPEED_MIN;  // Air quality is good, minimal fan speed
+    } else if (pm25 >= PM25_BAD) {
+        newFanSpeed = FAN_SPEED_MAX;  // Air quality is bad, maximum fan speed
+    } else {
+        // Linear interpolation between min and max speed
+        float ratio = (float)(pm25 - PM25_GOOD) / (float)(PM25_BAD - PM25_GOOD);
+        newFanSpeed = FAN_SPEED_MIN + ratio * (FAN_SPEED_MAX - FAN_SPEED_MIN);
+    }
+    
+    currentFanSpeed = newFanSpeed;
+    ledcWrite(0, currentFanSpeed);
 }
