@@ -17,6 +17,25 @@ const int PM25_MODERATE = 35;  // 13-35 μg/m3 - Moderate
 const int PM25_BAD = 55;       // 36-55 μg/m3 - Unhealthy for Sensitive Groups
 // Above 55 μg/m3 - Unhealthy
 
+// Add these color mapping structs at the top with other constants
+struct RGB {
+    int r, g, b;
+};
+
+const RGB AQI_COLORS[] = {
+    {0, 255, 0},    // Green (Good)
+    {255, 255, 0},  // Yellow (Moderate)
+    {255, 128, 0},  // Orange (Unhealthy for Sensitive Groups)
+    {255, 0, 0}     // Red (Unhealthy)
+};
+
+const int AQI_LEVELS[] = {
+    PM25_GOOD,      // 12
+    PM25_MODERATE,  // 35
+    PM25_BAD,       // 55
+    999             // Max value
+};
+
 void readBME280();
 void readPMSensor();
 void debugToSerial();
@@ -186,30 +205,34 @@ void displayPMSensor()
   lcd.print(environmentData.pm10);  
 }
 
+// Replace the existing updateAirQualityLed function with this one
 void updateAirQualityLed() {
-    // Common anode RGB LED - LOW turns on the color, HIGH turns it off
-    if(environmentData.pm2_5 <= PM25_GOOD) {
-        // Green - Good
-        digitalWrite(rgbLed[0], HIGH);  // R off
-        digitalWrite(rgbLed[1], LOW);   // G on
-        digitalWrite(rgbLed[2], HIGH);  // B off
+    int pm25 = environmentData.pm2_5;
+    
+    // Find which AQI range we're in
+    int i = 0;
+    while (i < 3 && pm25 > AQI_LEVELS[i]) {
+        i++;
     }
-    else if(environmentData.pm2_5 <= PM25_MODERATE) {
-        // Yellow - Moderate (Red + Green)
-        digitalWrite(rgbLed[0], LOW);   // R on
-        digitalWrite(rgbLed[1], LOW);   // G on
-        digitalWrite(rgbLed[2], HIGH);  // B off
+    
+    RGB color;
+    
+    if (i == 0) {
+        color = AQI_COLORS[0];
+    } else {
+        // Calculate how far we are between two levels (0.0 to 1.0)
+        float ratio = (float)(pm25 - AQI_LEVELS[i-1]) / 
+                     (float)(AQI_LEVELS[i] - AQI_LEVELS[i-1]);
+        
+        // Interpolate between colors
+        color.r = AQI_COLORS[i-1].r + ratio * (AQI_COLORS[i].r - AQI_COLORS[i-1].r);
+        color.g = AQI_COLORS[i-1].g + ratio * (AQI_COLORS[i].g - AQI_COLORS[i-1].g);
+        color.b = AQI_COLORS[i-1].b + ratio * (AQI_COLORS[i].b - AQI_COLORS[i-1].b);
     }
-    else if(environmentData.pm2_5 <= PM25_BAD) {
-        // Orange - Unhealthy for Sensitive Groups
-        digitalWrite(rgbLed[0], LOW);    // R on
-        digitalWrite(rgbLed[1], HIGH);   // G off
-        digitalWrite(rgbLed[2], HIGH);   // B off
-    }
-    else {
-        // Red - Unhealthy
-        digitalWrite(rgbLed[0], LOW);    // R on
-        digitalWrite(rgbLed[1], HIGH);   // G off
-        digitalWrite(rgbLed[2], HIGH);   // B off
-    }
+    
+    // Convert 0-255 range to HIGH/LOW for common anode RGB LED
+    // Remember: LOW = ON, HIGH = OFF for common anode
+    digitalWrite(rgbLed[0], (color.r < 128) ? HIGH : LOW);  // R
+    digitalWrite(rgbLed[1], (color.g < 128) ? HIGH : LOW);  // G
+    digitalWrite(rgbLed[2], (color.b < 128) ? HIGH : LOW);  // B
 }
