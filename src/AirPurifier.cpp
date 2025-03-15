@@ -15,7 +15,7 @@ const int PinConfig::PM_SENSOR_TX = 17;
 const int AirQualityConfig::PM25_GOOD = 12;
 const int AirQualityConfig::PM25_MODERATE = 35;
 const int AirQualityConfig::PM25_BAD = 55;
-const float AirQualityConfig::PM_CALIBRATION_FACTOR = 3.0;
+const float AirQualityConfig::PM_CALIBRATION_FACTOR = 1.0;
 
 const unsigned long TimingConfig::SENSOR_READ_INTERVAL = 2000;
 const unsigned long TimingConfig::DEBUG_OUTPUT_INTERVAL = 1000;
@@ -243,7 +243,7 @@ void AirPurifier::updateLED() {
 
 void AirPurifier::updateFan() {
     if (!systemEnabled || !autoFanControl) {
-        ledcWrite(FanConfig::PWM_CHANNEL, 0);
+        ledcWrite(FanConfig::PWM_CHANNEL, FanConfig::SPEED_MAX);  // Fan off (HIGH) when system disabled
         return;
     }
 
@@ -251,13 +251,14 @@ void AirPurifier::updateFan() {
     int newFanSpeed;
 
     if (pm25 <= AirQualityConfig::PM25_GOOD) {
-        newFanSpeed = FanConfig::SPEED_MIN;
+        newFanSpeed = FanConfig::SPEED_MAX;  // Low speed (mostly OFF) for good air quality
     } else if (pm25 >= AirQualityConfig::PM25_BAD) {
-        newFanSpeed = FanConfig::SPEED_MAX;
+        newFanSpeed = FanConfig::SPEED_MIN;  // Full speed (fully ON) for bad air quality
     } else {
+        // Linear interpolation between min and max speed (inverted for low-trigger)
         float ratio = (float)(pm25 - AirQualityConfig::PM25_GOOD) / 
                      (float)(AirQualityConfig::PM25_BAD - AirQualityConfig::PM25_GOOD);
-        newFanSpeed = FanConfig::SPEED_MIN + ratio * (FanConfig::SPEED_MAX - FanConfig::SPEED_MIN);
+        newFanSpeed = FanConfig::SPEED_MAX - ratio * (FanConfig::SPEED_MAX - FanConfig::SPEED_MIN);
     }
 
     newFanSpeed = constrain(newFanSpeed, FanConfig::SPEED_MIN, FanConfig::SPEED_MAX);
