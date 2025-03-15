@@ -201,16 +201,20 @@ void readBME280()
   environmentData.altitude = bme.readAltitude(1013.25);
 }
 
-// Modify readPMSensor() to handle timeouts
+// Add calibration multiplier constant
+const float PM_CALIBRATION_FACTOR = 3.0;  // 3x multiplier for PM sensor readings
+
+// Modify readPMSensor() to handle timeouts and apply calibration
 void readPMSensor() {
     unsigned long startTime = millis();
     bool readSuccess = false;
     
     while (millis() - startTime < 1000) {  // 1 second timeout
         if (pmSensor.read()) {
-            environmentData.pm1_0 = pmSensor.getPM1();
-            environmentData.pm2_5 = pmSensor.getPM2_5();
-            environmentData.pm10 = pmSensor.getPM10();
+            // Apply calibration factor to all PM readings
+            environmentData.pm1_0 = round(pmSensor.getPM1() * PM_CALIBRATION_FACTOR);
+            environmentData.pm2_5 = round(pmSensor.getPM2_5() * PM_CALIBRATION_FACTOR);
+            environmentData.pm10 = round(pmSensor.getPM10() * PM_CALIBRATION_FACTOR);
             readSuccess = true;
             break;
         }
@@ -341,9 +345,10 @@ void handleButton() {
 // Modify updateAirQualityLed to respect ledEnabled state
 void updateAirQualityLed() {
     if (!ledEnabled) {
-        digitalWrite(rgbLed[0], HIGH);
-        digitalWrite(rgbLed[1], HIGH);
-        digitalWrite(rgbLed[2], HIGH);
+        // Turn off all LEDs (LOW for common cathode/active-high)
+        digitalWrite(rgbLed[0], LOW);
+        digitalWrite(rgbLed[1], LOW);
+        digitalWrite(rgbLed[2], LOW);
         return;
     }
     
@@ -370,9 +375,10 @@ void updateAirQualityLed() {
         color.b = AQI_COLORS[i-1].b + ratio * (AQI_COLORS[i].b - AQI_COLORS[i-1].b);
     }
     
-    // Convert 0-255 range to HIGH/LOW for common anode RGB LED
-    // Remember: LOW = ON, HIGH = OFF for common anode
-    digitalWrite(rgbLed[0], (color.r < 128) ? HIGH : LOW);  // R
-    digitalWrite(rgbLed[1], (color.g < 128) ? HIGH : LOW);  // G
-    digitalWrite(rgbLed[2], (color.b < 128) ? HIGH : LOW);  // B
+    // For active-high LED:
+    // - Input of 255 (full brightness) should give HIGH output (LED on)
+    // - Input of 0 (no brightness) should give LOW output (LED off)
+    digitalWrite(rgbLed[0], (color.r > 128) ? HIGH : LOW);  // R
+    digitalWrite(rgbLed[1], (color.g > 128) ? HIGH : LOW);  // G
+    digitalWrite(rgbLed[2], (color.b > 128) ? HIGH : LOW);  // B
 }
