@@ -36,6 +36,30 @@ const int AQI_LEVELS[] = {
     999             // Max value
 };
 
+// Add these declarations after other constants
+const int BUTTON_PIN = 5;
+bool displayEnabled = true;
+bool ledEnabled = true;
+unsigned long lastDebounceTime = 0;
+const unsigned long DEBOUNCE_DELAY = 50;
+int lastButtonState = HIGH;
+int buttonState = HIGH;
+
+// Add these variables with other global variables
+const unsigned long HOLD_DURATION = 2000; // 2 seconds hold to power on/off
+unsigned long buttonPressStartTime = 0;
+bool systemEnabled = true;
+
+// Add these timing constants near other constants
+const unsigned long SENSOR_READ_INTERVAL = 2000;    // Read sensors every 2 seconds
+const unsigned long DEBUG_OUTPUT_INTERVAL = 1000;   // Debug output every 1 second
+const unsigned long BUTTON_CHECK_INTERVAL = 50;     // Check button every 50ms
+
+// Add these timing variables with other global variables
+unsigned long lastSensorRead = 0;
+unsigned long lastDebugOutput = 0;
+unsigned long lastButtonCheck = 0;
+
 void readBME280();
 void readPMSensor();
 void debugToSerial();
@@ -44,6 +68,12 @@ void displayData();
 void displayBME280();
 void displayPMSensor();
 void updateAirQualityLed();
+// Add this function declaration with the others
+void handleButton();
+
+// Add these function declarations
+void debugBME280();
+void debugPMSensor();
 
 struct EnvironmentData
 {
@@ -90,40 +120,77 @@ void setup()
       pinMode(rgbLed[i], OUTPUT);
       digitalWrite(rgbLed[i], HIGH); // Turn off LED (common anode)
   }
+
+  // Add button setup
+  pinMode(BUTTON_PIN, INPUT);
+    
+  lcd.backlight();  // Ensure backlight is on initially
 }
 
-void loop()
-{
-  readData();
-  debugToSerial();
-  displayData();
-  updateAirQualityLed();
+// Modify loop() for non-blocking operation
+void loop() {
+    unsigned long currentMillis = millis();
+    
+    // Check button state with interval
+    if (currentMillis - lastButtonCheck >= BUTTON_CHECK_INTERVAL) {
+        lastButtonCheck = currentMillis;
+        handleButton();
+    }
+    
+    if (systemEnabled) {
+        // Read sensors with interval
+        if (currentMillis - lastSensorRead >= SENSOR_READ_INTERVAL) {
+            lastSensorRead = currentMillis;
+            readData();
+        }
+        
+        // Debug output with interval
+        if (currentMillis - lastDebugOutput >= DEBUG_OUTPUT_INTERVAL) {
+            lastDebugOutput = currentMillis;
+            debugToSerial();
+        }
+        
+        if (displayEnabled) {
+            displayData();
+        }
+        if (ledEnabled) {
+            updateAirQualityLed();
+        }
+    }
 }
 
-void debugToSerial()
-{
-  Serial.print("Temperature = ");
-  Serial.print(environmentData.temperature);
-  Serial.println(" *C");
-  Serial.print("Humidity = ");
-  Serial.print(environmentData.humidity);
-  Serial.println(" %");
-  Serial.print("Pressure = ");
-  Serial.print(environmentData.pressure);
-  Serial.println(" hPa");
-  Serial.print("Altitude = ");
-  Serial.print(environmentData.altitude);
-  Serial.println(" m");
-  Serial.print("PM1.0 = ");
-  Serial.print(environmentData.pm1_0);
-  Serial.println(" μg/m3");
-  Serial.print("PM2.5 = ");
-  Serial.print(environmentData.pm2_5);
-  Serial.println(" μg/m3");
-  Serial.print("PM10 = ");
-  Serial.print(environmentData.pm10);
-  Serial.println(" μg/m3");
-  Serial.println();
+// Replace debugToSerial() with these three functions
+void debugToSerial() {
+    debugBME280();
+    debugPMSensor();
+    Serial.println();
+}
+
+void debugBME280() {
+    Serial.print("Temperature = ");
+    Serial.print(environmentData.temperature);
+    Serial.println(" *C");
+    Serial.print("Humidity = ");
+    Serial.print(environmentData.humidity);
+    Serial.println(" %");
+    Serial.print("Pressure = ");
+    Serial.print(environmentData.pressure);
+    Serial.println(" hPa");
+    Serial.print("Altitude = ");
+    Serial.print(environmentData.altitude);
+    Serial.println(" m");
+}
+
+void debugPMSensor() {
+    Serial.print("PM1.0 = ");
+    Serial.print(environmentData.pm1_0);
+    Serial.println(" μg/m3");
+    Serial.print("PM2.5 = ");
+    Serial.print(environmentData.pm2_5);
+    Serial.println(" μg/m3");
+    Serial.print("PM10 = ");
+    Serial.print(environmentData.pm10);
+    Serial.println(" μg/m3");
 }
 
 void readBME280()
@@ -134,16 +201,25 @@ void readBME280()
   environmentData.altitude = bme.readAltitude(1013.25);
 }
 
-void readPMSensor()
-{
-  if (!pmSensor.read())
-  {
-    Serial.println("Could not read data from PMSensor");
-    return;
-  }
-  environmentData.pm1_0 = pmSensor.getPM1();
-  environmentData.pm2_5 = pmSensor.getPM2_5();
-  environmentData.pm10 = pmSensor.getPM10();
+// Modify readPMSensor() to handle timeouts
+void readPMSensor() {
+    unsigned long startTime = millis();
+    bool readSuccess = false;
+    
+    while (millis() - startTime < 1000) {  // 1 second timeout
+        if (pmSensor.read()) {
+            environmentData.pm1_0 = pmSensor.getPM1();
+            environmentData.pm2_5 = pmSensor.getPM2_5();
+            environmentData.pm10 = pmSensor.getPM10();
+            readSuccess = true;
+            break;
+        }
+        yield();  // Allow other tasks to run
+    }
+    
+    if (!readSuccess) {
+        Serial.println("PM Sensor read timeout");
+    }
 }
 
 void readData()
@@ -205,8 +281,72 @@ void displayPMSensor()
   lcd.print(environmentData.pm10);  
 }
 
-// Replace the existing updateAirQualityLed function with this one
+// Modify handleButton() to remove blocking delays
+void handleButton() {
+    int reading = digitalRead(BUTTON_PIN);
+    
+    if (reading != lastButtonState) {
+        lastDebounceTime = millis();
+        
+        if (reading == LOW) {
+            buttonPressStartTime = millis();
+        }
+        else if (reading == HIGH) {
+            unsigned long pressDuration = millis() - buttonPressStartTime;
+            if (pressDuration < HOLD_DURATION) {
+                // Short press - toggle display if system is enabled
+                if (systemEnabled) {
+                    displayEnabled = !displayEnabled;
+                    if (displayEnabled) {
+                        lcd.backlight();
+                    } else {
+                        lcd.noBacklight();
+                    }
+                }
+            }
+        }
+    }
+    
+    // Check for long press while button is still being held
+    if (reading == LOW) {
+        unsigned long pressDuration = millis() - buttonPressStartTime;
+        if (pressDuration >= HOLD_DURATION) {
+            // Long press - toggle system state
+            systemEnabled = !systemEnabled;
+            
+            if (!systemEnabled) {
+                displayEnabled = false;
+                ledEnabled = false;
+                lcd.noBacklight();
+                // Turn OFF the LEDs (set pins LOW for common anode)
+                digitalWrite(rgbLed[0], LOW);
+                digitalWrite(rgbLed[1], LOW);
+                digitalWrite(rgbLed[2], LOW);
+            } else {
+                displayEnabled = true;
+                ledEnabled = true;
+                lcd.backlight();
+            }
+            
+            // Wait for button release to prevent multiple toggles
+            while (digitalRead(BUTTON_PIN) == LOW) {
+                delay(10);
+            }
+        }
+    }
+    
+    lastButtonState = reading;
+}
+
+// Modify updateAirQualityLed to respect ledEnabled state
 void updateAirQualityLed() {
+    if (!ledEnabled) {
+        digitalWrite(rgbLed[0], HIGH);
+        digitalWrite(rgbLed[1], HIGH);
+        digitalWrite(rgbLed[2], HIGH);
+        return;
+    }
+    
     int pm25 = environmentData.pm2_5;
     
     // Find which AQI range we're in
