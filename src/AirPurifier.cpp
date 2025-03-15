@@ -38,12 +38,11 @@ AirPurifier::AirPurifier()
       lastButtonState(HIGH), buttonPressStartTime(0), lastDebounceTime(0) {}
 
 void AirPurifier::begin() {
-    lcd.begin(16, 2);
     lcd.init();
-    lcd.backlight();
     lcd.clear();
     lcd.home();
     lcd.print("Initializing...");
+    lcd.backlight();
     pmSensor.begin(9600);
     if (!bme.begin(0x76)) {
         Serial.println("Could not find a valid BME280 sensor, check wiring!");
@@ -51,8 +50,9 @@ void AirPurifier::begin() {
     }
     lcd.clear();
     lcd.home();
-    lcd.print("Ready!");
     lcd.noAutoscroll();
+    lcd.print("Ready!");
+    
 
     for (int i = 0; i < 3; i++) {
         pinMode(PinConfig::RGB_LED[i], OUTPUT);
@@ -171,7 +171,10 @@ void AirPurifier::handleButton() {
                     displayEnabled = !displayEnabled;
                     if (displayEnabled) {
                         lcd.backlight();
+                        lastDisplayChange = 0; // Reset timer to force updateDisplay() to refresh
+                        updateDisplay();     // Force an immediate update
                     } else {
+                        lcd.clear();         // Clear display before turning off
                         lcd.noBacklight();
                     }
                 }
@@ -187,15 +190,23 @@ void AirPurifier::handleButton() {
             if (!systemEnabled) {
                 displayEnabled = false;
                 ledEnabled = false;
+                lcd.clear();  // Clear display before turning off
                 lcd.noBacklight();
                 // Turn off LEDs (LOW for active-high)
                 digitalWrite(PinConfig::RGB_LED[0], LOW);
                 digitalWrite(PinConfig::RGB_LED[1], LOW);
                 digitalWrite(PinConfig::RGB_LED[2], LOW);
+                // Detach PWM and drive fan pin HIGH to fully turn off fan (active low relay)
+                ledcDetachPin(PinConfig::FAN);
+                digitalWrite(PinConfig::FAN, HIGH);
             } else {
                 displayEnabled = true;
                 ledEnabled = true;
                 lcd.backlight();
+                lastDisplayChange = 0; // Force immediate update after re-enabling display
+                updateDisplay();       // Force an immediate update
+                // Reattach PWM control to the fan pin
+                ledcAttachPin(PinConfig::FAN, FanConfig::PWM_CHANNEL);
             }
 
             while (digitalRead(PinConfig::BUTTON) == LOW) {
@@ -257,7 +268,7 @@ void AirPurifier::updateFan() {
     } else {
         // Linear interpolation between min and max speed (inverted for low-trigger)
         float ratio = (float)(pm25 - AirQualityConfig::PM25_GOOD) / 
-                     (float)(AirQualityConfig::PM25_BAD - AirQualityConfig::PM25_GOOD);
+                     (float)(AirQualityConfig::PM25_BAD - AirQualityConfig::PM25_MODERATE);
         newFanSpeed = FanConfig::SPEED_MAX - ratio * (FanConfig::SPEED_MAX - FanConfig::SPEED_MIN);
     }
 
