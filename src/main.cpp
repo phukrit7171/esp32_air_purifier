@@ -4,7 +4,7 @@
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 #include <Adafruit_BME280.h>
-Adafruit_BME280 bme;
+Adafruit_BME280 bme; //i2c mode
 
 #include "PMSensor.h"
 // Create PMSensor instance with RX pin 16 and TX pin 17
@@ -140,11 +140,16 @@ void displayPMSensor()
 {
   lcd.clear();
   lcd.home();
-  lcd.print("PM1.0:");
-  lcd.print(environmentData.pm1_0);
+  lcd.setCursor(0, 0);
+  lcd.print("PM1.0");
+  lcd.setCursor(6, 0);
+  lcd.print("PM2.5");
+  lcd.setCursor(12, 0);
+  lcd.print("PM10");
   lcd.setCursor(0, 1);
-  lcd.print("PM2.5:");
+  lcd.print(environmentData.pm1_0);
+  lcd.setCursor(6, 1);
   lcd.print(environmentData.pm2_5);
-  lcd.print("PM10:");
-  lcd.print(environmentData.pm10);
+  lcd.setCursor(12, 1);
+  lcd.print(environmentData.pm10);  
 }
