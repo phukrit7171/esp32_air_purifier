@@ -10,6 +10,13 @@ Adafruit_BME280 bme; //i2c mode
 // Create PMSensor instance with RX pin 16 and TX pin 17
 PMSensor pmSensor(16, 17);
 
+const int rgbLed[] = {4,2,15}; // R, G, B
+
+const int PM25_GOOD = 12;      // 0-12 μg/m3 - Good
+const int PM25_MODERATE = 35;  // 13-35 μg/m3 - Moderate
+const int PM25_BAD = 55;       // 36-55 μg/m3 - Unhealthy for Sensitive Groups
+// Above 55 μg/m3 - Unhealthy
+
 void readBME280();
 void readPMSensor();
 void debugToSerial();
@@ -17,6 +24,7 @@ void readData();
 void displayData();
 void displayBME280();
 void displayPMSensor();
+void updateAirQualityLed();
 
 struct EnvironmentData
 {
@@ -29,7 +37,14 @@ struct EnvironmentData
   int pm10;
 } environmentData;
 
+enum DisplayState {
+    SHOW_BME280,
+    SHOW_PM_SENSOR
+};
 
+DisplayState currentDisplay = SHOW_BME280;
+unsigned long lastDisplayChange = 0;
+const unsigned long DISPLAY_INTERVAL = 5000; // 5 seconds
 
 void setup()
 {
@@ -50,6 +65,12 @@ void setup()
   lcd.home();
   lcd.print("Ready!");
   lcd.noAutoscroll();
+
+  // Add LED pin setup
+  for(int i = 0; i < 3; i++) {
+      pinMode(rgbLed[i], OUTPUT);
+      digitalWrite(rgbLed[i], HIGH); // Turn off LED (common anode)
+  }
 }
 
 void loop()
@@ -57,8 +78,8 @@ void loop()
   readData();
   debugToSerial();
   displayData();
+  updateAirQualityLed();
 }
-
 
 void debugToSerial()
 {
@@ -112,28 +133,39 @@ void readData()
   readPMSensor();
 }
 
-void displayData(){
-  displayBME280();
-  delay(5000);
-  displayPMSensor();
-  delay(5000);
+void displayData() {
+    unsigned long currentMillis = millis();
+    
+    if (currentMillis - lastDisplayChange >= DISPLAY_INTERVAL) {
+        lastDisplayChange = currentMillis;
+        
+        switch (currentDisplay) {
+            case SHOW_BME280:
+                displayBME280();
+                currentDisplay = SHOW_PM_SENSOR;
+                break;
+                
+            case SHOW_PM_SENSOR:
+                displayPMSensor();
+                currentDisplay = SHOW_BME280;
+                break;
+        }
+    }
 }
 
 void displayBME280()
 {
   lcd.clear();
   lcd.home();
-  lcd.print("T:");
-  lcd.print(environmentData.temperature);
-  lcd.print(" H:");
-  lcd.print(environmentData.humidity);
-  lcd.print("%");
+  lcd.setCursor(0, 0);
+  lcd.print("Temp  Hum   Pres");
   lcd.setCursor(0, 1);
-  lcd.print("P:");
+  lcd.print(environmentData.temperature);
+  lcd.setCursor(6, 1);
+  lcd.print(environmentData.humidity);
+  lcd.setCursor(12, 1);
   lcd.print(environmentData.pressure);
-  lcd.print(" A:");
-  lcd.print(environmentData.altitude);
-  lcd.print(" m");
+  // lcd.print(environmentData.altitude);
 }
 
 void displayPMSensor()
@@ -152,4 +184,32 @@ void displayPMSensor()
   lcd.print(environmentData.pm2_5);
   lcd.setCursor(12, 1);
   lcd.print(environmentData.pm10);  
+}
+
+void updateAirQualityLed() {
+    // Common anode RGB LED - LOW turns on the color, HIGH turns it off
+    if(environmentData.pm2_5 <= PM25_GOOD) {
+        // Green - Good
+        digitalWrite(rgbLed[0], HIGH);  // R off
+        digitalWrite(rgbLed[1], LOW);   // G on
+        digitalWrite(rgbLed[2], HIGH);  // B off
+    }
+    else if(environmentData.pm2_5 <= PM25_MODERATE) {
+        // Yellow - Moderate (Red + Green)
+        digitalWrite(rgbLed[0], LOW);   // R on
+        digitalWrite(rgbLed[1], LOW);   // G on
+        digitalWrite(rgbLed[2], HIGH);  // B off
+    }
+    else if(environmentData.pm2_5 <= PM25_BAD) {
+        // Orange - Unhealthy for Sensitive Groups
+        digitalWrite(rgbLed[0], LOW);    // R on
+        digitalWrite(rgbLed[1], HIGH);   // G off
+        digitalWrite(rgbLed[2], HIGH);   // B off
+    }
+    else {
+        // Red - Unhealthy
+        digitalWrite(rgbLed[0], LOW);    // R on
+        digitalWrite(rgbLed[1], HIGH);   // G off
+        digitalWrite(rgbLed[2], HIGH);   // B off
+    }
 }
