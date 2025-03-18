@@ -25,7 +25,7 @@ const unsigned long TimingConfig::DEBOUNCE_DELAY = 50;
 const unsigned long TimingConfig::HOLD_DURATION = 2000;
 
 const int FanConfig::SPEED_MIN = 0;
-const int FanConfig::SPEED_MAX = 255;
+const int FanConfig::SPEED_MAX = 126;
 const int FanConfig::PWM_CHANNEL = 0;
 const int FanConfig::PWM_FREQ = 25000;
 const int FanConfig::PWM_RESOLUTION = 8;
