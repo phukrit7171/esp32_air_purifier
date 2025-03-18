@@ -25,7 +25,7 @@ const unsigned long TimingConfig::DEBOUNCE_DELAY = 50;
 const unsigned long TimingConfig::HOLD_DURATION = 2000;
 
 const int FanConfig::SPEED_MIN = 0;
-const int FanConfig::SPEED_MAX = 126;
+const int FanConfig::SPEED_MAX = 150; // max 255
 const int FanConfig::PWM_CHANNEL = 0;
 const int FanConfig::PWM_FREQ = 25000;
 const int FanConfig::PWM_RESOLUTION = 8;
@@ -258,17 +258,23 @@ void AirPurifier::updateFan() {
         return;
     }
 
-    int pm25 = envData.pm2_5;
-    int newFanSpeed;
+    // Compute the worst PM reading among PM1.0, PM2.5, and PM10
+    int maxPM = envData.pm1_0;
+    if (envData.pm2_5 > maxPM) {
+        maxPM = envData.pm2_5;
+    }
+    if (envData.pm10 > maxPM) {
+        maxPM = envData.pm10;
+    }
 
-    if (pm25 <= AirQualityConfig::PM25_GOOD) {
-        newFanSpeed = FanConfig::SPEED_MAX;  // Low speed (mostly OFF) for good air quality
-    } else if (pm25 >= AirQualityConfig::PM25_BAD) {
-        newFanSpeed = FanConfig::SPEED_MIN;  // Full speed (fully ON) for bad air quality
+    int newFanSpeed;
+    if (maxPM <= AirQualityConfig::PM25_GOOD) {
+        newFanSpeed = FanConfig::SPEED_MAX;  // Good air quality: low fan speed (mostly OFF)
+    } else if (maxPM >= AirQualityConfig::PM25_BAD) {
+        newFanSpeed = FanConfig::SPEED_MIN;  // Bad air quality: full fan speed (fully ON)
     } else {
-        // Linear interpolation between min and max speed (inverted for low-trigger)
-        float ratio = (float)(pm25 - AirQualityConfig::PM25_GOOD) / 
-                     (float)(AirQualityConfig::PM25_BAD - AirQualityConfig::PM25_MODERATE);
+        float ratio = (float)(maxPM - AirQualityConfig::PM25_GOOD) /
+                      (AirQualityConfig::PM25_BAD - AirQualityConfig::PM25_GOOD);
         newFanSpeed = FanConfig::SPEED_MAX - ratio * (FanConfig::SPEED_MAX - FanConfig::SPEED_MIN);
     }
 
