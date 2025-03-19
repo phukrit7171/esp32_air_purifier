@@ -2,19 +2,22 @@
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Features](#features)
-- [Hardware Requirements](#hardware-requirements)
-- [Software Requirements](#software-requirements)
-- [Installation & Setup](#installation--setup)
-- [How to Use](#how-to-use)
-- [System Architecture](#system-architecture)
-  - [Hardware Block Diagram](#hardware-block-diagram)
-  - [State Machine Diagram](#state-machine-diagram)
-  - [Class UML Diagram](#class-uml-diagram)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
+- [ESP32 Air Purifier Project](#esp32-air-purifier-project)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Features](#features)
+  - [Hardware Requirements](#hardware-requirements)
+  - [Software Requirements](#software-requirements)
+  - [Installation \& Setup](#installation--setup)
+  - [How to Use](#how-to-use)
+  - [System Architecture](#system-architecture)
+    - [Hardware Block Diagram](#hardware-block-diagram)
+    - [State Machine Diagram](#state-machine-diagram)
+    - [Class UML Diagram](#class-uml-diagram)
+    - [Main Control Sequence](#main-control-sequence)
+  - [Troubleshooting](#troubleshooting)
+  - [Contributing](#contributing)
+  - [License](#license)
 
 ## Overview
 
@@ -154,7 +157,7 @@ stateDiagram-v2
     state "LED State Machine" as LEDSM {
         [*] --> LEDEnabled
         LEDEnabled --> LEDDisabled : System disabled
-        LEDDisabled --> LEDEnabled : System enabled
+        LEDDisabled --> SystemEnabled : System enabled
         
         state LEDEnabled {
             [*] --> CheckPM25
@@ -248,6 +251,35 @@ classDiagram
     AirPurifier ..> LiquidCrystal_I2C : dependency
     AirPurifier ..> Adafruit_BME280 : dependency
 ```
+
+### Main Control Sequence
+
+```mermaid
+sequenceDiagram
+    participant Main
+    participant AirPurifier
+    participant PMSensor
+    participant FanConfig
+    
+    Main->>+AirPurifier: begin()
+    activate AirPurifier
+    AirPurifier->>+PMSensor: begin()
+    AirPurifier->>+FanConfig: begin()
+    deactivate AirPurifier
+    
+    loop Every 100ms (loop())
+        Main->>+AirPurifier: update()
+        activate AirPurifier
+        AirPurifier->>+PMSensor: readPM25()
+        PMSensor-->>-AirPurifier: pm25Value
+        AirPurifier->>+FanConfig: calculateTargetSpeed(pm25Value)
+        FanConfig-->>-AirPurifier: targetSpeed
+        AirPurifier->>FanConfig: applySpeed(targetSpeed)
+        deactivate AirPurifier
+    end
+```
+
+This diagram shows the primary interaction flow between system components.
 
 ## Troubleshooting
 
