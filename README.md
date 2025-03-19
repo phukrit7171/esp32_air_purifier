@@ -1,9 +1,11 @@
 # ESP32 Air Purifier Project
 
 ## Overview
-This project implements an air purifier controller using an ESP32 microcontroller. It monitors environmental parameters such as temperature, humidity, pressure (via a BME280 sensor), and particulate matter levels (via a PMSensor). The readings are displayed on an I2C LiquidCrystal display, while LEDs and a fan provide visual and physical feedback. The system is controlled by a state machine and user input through a button that toggles display modes and system power.
+
+This project is designed to manage an air purifier system using an ESP32 microcontroller. It integrates multiple sensors, controls a fan (PWM/Digital), and interfaces with an LCD display.
 
 ## Features
+
 - **Environmental Monitoring:** Measures temperature, humidity, pressure, and PM1.0, PM2.5, PM10 levels.
 - **Display:** Shows sensor data and system status on a 16x2 I2C LCD.
 - **LED Indicators:** Uses an RGB LED module with pin order: Green, Blue, Red.
@@ -13,6 +15,7 @@ This project implements an air purifier controller using an ESP32 microcontrolle
 - **PlatformIO Integration:** Fully configured project using PlatformIO with the Arduino framework.
 
 ## Hardware Requirements
+
 - ESP32 development board (e.g., DOIT ESP32 DEVKIT V1)
 - BME280 sensor module
 - Particulate Matter sensor (PMSensor)
@@ -41,6 +44,7 @@ This project implements an air purifier controller using an ESP32 microcontrolle
 
 3. **Configure PlatformIO:**  
    Verify that the `platformio.ini` file is set up for your board:
+
    ```ini
    [env:esp32doit-devkit-v1]
    platform = espressif32
@@ -75,7 +79,88 @@ This project implements an air purifier controller using an ESP32 microcontrolle
    - **Long Press (approx. 2 seconds):** Changes the system state (power on/off).
    - Refer to the project’s state machine diagrams (e.g., in `# Air Purifier State Machine Diagram.md` and `button_state_machine.md`) for detailed control flow.
 
+## Diagrams
+
+Below are various diagrams for visualizing system components. You can add more diagram types or remove any that are unnecessary.
+
+### State Machine Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initialization
+    Initialization --> Monitoring : begin() completes
+    Monitoring --> Alarm : Sensor error detected
+    Alarm --> Monitoring : Error resolved
+    Monitoring --> Shutdown : System disabled
+    Shutdown --> [*]
+```
+
+### Class UML Diagram
+
+```mermaid
+classDiagram
+    class AirPurifier {
+        +begin()
+        +update()
+        +readSensors()
+        +updateFan()
+        +updateDisplay()
+        +handleButton()
+        +debugOutput()
+    }
+    class PMSensor {
+        +begin(baudRate)
+        +read() : bool
+        +getPM1() : unsigned int
+        +getPM2_5() : unsigned int
+        +getPM10() : unsigned int
+        +printData()
+    }
+    class FanConfig {
+        <<static>>
+        +SPEED_MIN : int
+        +SPEED_MAX : int
+        +PWM_CHANNEL : int
+        +PWM_FREQ : int
+        +PWM_RESOLUTION : int
+        +controlMethod : FanControlMethod
+        +polarity : FanPolarity
+    }
+    AirPurifier --> PMSensor : uses
+    AirPurifier --> FanConfig : uses
+```
+
+### Flow Diagram
+
+```mermaid
+flowchart TD
+    A[Start] --> B[Initialize System]
+    B --> C[Read Sensors]
+    C --> D{Sensors Valid?}
+    D -- Yes --> E[Update Display & Fan]
+    D -- No --> F[Output Error]
+    E --> G[Debug Output]
+    F --> G
+    G --> H[Loop Back]
+    H --> C
+```
+
+### Tree Diagram (Project Structure)
+
+```plaintext
+.
+├── include
+│   └── PMSensor.h
+├── src
+│   ├── AirPurifier.cpp
+│   ├── FanConfig.cpp
+│   ├── main.cpp
+│   └── PMSensor.cpp
+└── platformio.ini
+```
+
 ## Troubleshooting
+
 - **Sensor Detection Issues:**  
   If the BME280 does not initialize, check the wiring and ensure the correct I2C address.
 - **Display Problems:**  
@@ -86,6 +171,7 @@ This project implements an air purifier controller using an ESP32 microcontrolle
   Adjust debounce timing in code if necessary.
 
 ## Additional Information
+
 For further details and design insights, refer to the accompanying state machine diagrams and documentation files in the project folder.
 
 Happy building!
