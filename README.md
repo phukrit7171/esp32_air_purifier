@@ -267,7 +267,7 @@ sequenceDiagram
     AirPurifier->>+FanConfig: begin()
     deactivate AirPurifier
     
-    loop Every 2000ms (loop())
+    loop 
         Main->>+AirPurifier: update()
         activate AirPurifier
         AirPurifier->>+PMSensor: readPM25()
