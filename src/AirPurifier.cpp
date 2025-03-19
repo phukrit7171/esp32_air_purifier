@@ -135,6 +135,7 @@ void AirPurifier::readSensors()
     float temp = bme.readTemperature();
     float pres = bme.readPressure();
     float hum = bme.readHumidity();
+    float alt = bme.readAltitude(1013.25);
 
     if (isnan(temp) || isnan(pres) || isnan(hum))
     {
@@ -145,7 +146,7 @@ void AirPurifier::readSensors()
     envData.temperature = temp;
     envData.pressure = pres / 100.0F;
     envData.humidity = hum;
-    envData.altitude = bme.readAltitude(1013.25);
+    envData.altitude = alt;
 
     unsigned long startTime = millis();
     bool readSuccess = false;
