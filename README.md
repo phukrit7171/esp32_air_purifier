@@ -118,18 +118,25 @@ The air purifier implements multiple state machines to manage different aspects 
 ```mermaid
 stateDiagram-v2
     %% Main System State Machine
+    direction LR
+    
     state "System State Machine" as SystemSM {
         [*] --> Initialization
         Initialization --> SystemEnabled : begin() completes
         SystemEnabled --> SystemDisabled : Long button press (2s)
         SystemDisabled --> SystemEnabled : Long button press (2s)
     }
-    
+```
+
+```mermaid
+stateDiagram-v2
     %% Display State Machine
+    direction LR
+    
     state "Display State Machine" as DisplaySM {
         [*] --> DisplayEnabled
-        DisplayEnabled --> DisplayDisabled : Short button press when system enabled
-        DisplayDisabled --> DisplayEnabled : Short button press when system enabled
+        DisplayEnabled --> DisplayDisabled : Short button press
+        DisplayDisabled --> DisplayEnabled : Short button press
         
         state DisplayEnabled {
             [*] --> BME280View
@@ -137,8 +144,13 @@ stateDiagram-v2
             PMSensorView --> BME280View : Auto toggle (5s)
         }
     }
-    
+```
+
+```mermaid
+stateDiagram-v2
     %% LED Indicator State Machine
+    direction LR
+    
     state "LED State Machine" as LEDSM {
         [*] --> LEDEnabled
         LEDEnabled --> LEDDisabled : System disabled
@@ -151,17 +163,22 @@ stateDiagram-v2
             CheckPM25 --> RedLED : PM2.5 > 35
         }
     }
-    
+```
+
+```mermaid
+stateDiagram-v2
     %% Fan Control State Machine
+    direction LR
+    
     state "Fan Control State Machine" as FanSM {
-        [*] --> FanOff
+        [*] --> FanOff : Initial state
         FanOff --> FanAuto : System enabled
         FanAuto --> FanOff : System disabled
         
         state FanAuto {
             [*] --> CheckControlMethod
-            CheckControlMethod --> DigitalMode : controlMethod == DIGITAL
-            CheckControlMethod --> PWMMode : controlMethod == PWM
+            CheckControlMethod --> DigitalMode : DIGITAL
+            CheckControlMethod --> PWMMode : PWM
             
             state DigitalMode {
                 [*] --> CheckAirQualityDigital
@@ -171,9 +188,9 @@ stateDiagram-v2
             
             state PWMMode {
                 [*] --> CheckAirQualityPWM
-                CheckAirQualityPWM --> FanLowSpeed : 12 < PM2.5 ≤35
-                CheckAirQualityPWM --> FanHighSpeed : PM2.5 >35
-                CheckAirQualityPWM --> FanOff : PM2.5 ≤12
+                CheckAirQualityPWM --> FanLowSpeed : 12 < PM2.5 ≤ 35
+                CheckAirQualityPWM --> FanHighSpeed : PM2.5 > 35
+                CheckAirQualityPWM --> FanOff : PM2.5 ≤ 12
             }
         }
     }
