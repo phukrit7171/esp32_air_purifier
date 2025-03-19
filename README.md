@@ -1,6 +1,7 @@
 # ESP32 Air Purifier Project
 
 ## Table of Contents
+
 - [Overview](#overview)
 - [Features](#features)
 - [Hardware Requirements](#hardware-requirements)
