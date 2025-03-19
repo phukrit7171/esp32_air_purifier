@@ -55,19 +55,19 @@ void AirPurifier::begin()
     for (int i = 0; i < 3; i++)
     {
         pinMode(PinConfig::RGB_LED[i], OUTPUT);
-        digitalWrite(PinConfig::RGB_LED[i], LOW); // Initialize LEDs OFF for active-high
+        digitalWrite(PinConfig::RGB_LED[i], LOW); // Set RGB LED to OFF (active-high wiring)
     }
 
     pinMode(PinConfig::BUTTON, INPUT);
     pinMode(PinConfig::FAN, OUTPUT);
     
-    // Make sure fan is OFF at startup (properly configure for current control method)
+    // Ensure fan is OFF at startup using the current control method.
     if (FanConfig::controlMethod == FanControlMethod::DIGITAL) {
-        // Digital control - directly drive pin based on polarity
+        // Digital mode: set fan state based on polarity (active low: off = HIGH, active high: off = LOW)
         digitalWrite(PinConfig::FAN, (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? HIGH : LOW);
         isPwmAttached = false;
     } else {
-        // PWM control
+        // PWM mode
         ledcSetup(FanConfig::PWM_CHANNEL, FanConfig::PWM_FREQ, FanConfig::PWM_RESOLUTION);
         ledcAttachPin(PinConfig::FAN, FanConfig::PWM_CHANNEL);
         // Initialize PWM to off state based on polarity
@@ -76,10 +76,10 @@ void AirPurifier::begin()
         isPwmAttached = true;
     }
     
-    // Initialize the control method tracking variable
+    // Track the current fan control method.
     previousControlMethod = FanConfig::controlMethod;
     
-    // Initial debug output for fan state
+    // Initial debug output for fan configuration
     Serial.print("Fan initialized: ");
     Serial.print(FanConfig::controlMethod == FanControlMethod::DIGITAL ? "DIGITAL" : "PWM");
     Serial.print(", Polarity: ");
@@ -320,9 +320,8 @@ void AirPurifier::updateLED()
 
 void AirPurifier::updateFan()
 {
-    // Check if control method has changed
+    // Detect change in fan control method and reinitialize if required.
     if (previousControlMethod != FanConfig::controlMethod) {
-        // Control method changed, reset control mode
         if (isPwmAttached) {
             ledcDetachPin(PinConfig::FAN);
             pinMode(PinConfig::FAN, OUTPUT);
@@ -333,29 +332,23 @@ void AirPurifier::updateFan()
 
     if (!systemEnabled || !autoFanControl)
     {
-        // Make sure we're in the right control mode
+        // Set fan OFF per configured control mode.
         if (FanConfig::controlMethod == FanControlMethod::PWM)
         {
-            // Ensure pin is attached to PWM if needed
             if (!isPwmAttached) {
                 ledcAttachPin(PinConfig::FAN, FanConfig::PWM_CHANNEL);
                 isPwmAttached = true;
             }
-            
-            // Set PWM to off value based on polarity
             int offValue = (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? 255 : 0;
             ledcWrite(FanConfig::PWM_CHANNEL, offValue);
         }
         else
-        { // DIGITAL control (off)
-            // Ensure pin is detached from PWM
+        {
             if (isPwmAttached) {
                 ledcDetachPin(PinConfig::FAN);
                 pinMode(PinConfig::FAN, OUTPUT);
                 isPwmAttached = false;
             }
-            
-            // Turn off fan based on polarity
             digitalWrite(PinConfig::FAN, (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? HIGH : LOW);
         }
         return;
@@ -369,12 +362,10 @@ void AirPurifier::updateFan()
 
     if (FanConfig::controlMethod == FanControlMethod::PWM)
     {
-        // Ensure PWM is attached
         if (!isPwmAttached) {
             ledcAttachPin(PinConfig::FAN, FanConfig::PWM_CHANNEL);
             isPwmAttached = true;
         }
-        
         int pwmValue = 0;
         if (maxPM <= AirQualityConfig::PM25_GOOD)
         {
@@ -387,7 +378,7 @@ void AirPurifier::updateFan()
                 pwmValue = map(maxPM, 0, 300, 0, 255);
             }
             else
-            { // ACTIVE_HIGH
+            {
                 pwmValue = map(maxPM, 0, 300, 255, 0);
             }
             pwmValue = constrain(pwmValue, 0, 255);
@@ -395,23 +386,19 @@ void AirPurifier::updateFan()
         ledcWrite(FanConfig::PWM_CHANNEL, pwmValue);
     }
     else
-    { // DIGITAL control (on/off)
-        // Ensure pin is detached from PWM
+    {
         if (isPwmAttached) {
             ledcDetachPin(PinConfig::FAN);
             pinMode(PinConfig::FAN, OUTPUT);
             isPwmAttached = false;
         }
-        
         int digitalValue;
         if (maxPM <= AirQualityConfig::PM25_GOOD)
         {
-            // Fan off when AQI is good
             digitalValue = (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? HIGH : LOW;
         }
         else
         {
-            // Fan on when AQI is bad
             digitalValue = (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? LOW : HIGH;
         }
         digitalWrite(PinConfig::FAN, digitalValue);

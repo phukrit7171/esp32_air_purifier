@@ -27,7 +27,7 @@ bool PMSensor::read() {
     value = _serial.read();
     
     if ((index == 0 && value != 0x42) || (index == 1 && value != 0x4d)) {
-      // Data header not found
+      // Expected header bytes not found, resetting index.
       index = 0;
       continue;
     }
