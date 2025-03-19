@@ -137,7 +137,7 @@ void AirPurifier::readSensors()
     float hum = bme.readHumidity();
     float alt = bme.readAltitude(1013.25);
 
-    if (isnan(temp) || isnan(pres) || isnan(hum))
+    if (isnan(temp) || isnan(pres) || isnan(hum) || isnan(alt))
     {
         Serial.println("Failed to read from BME280 sensor!");
         return;
