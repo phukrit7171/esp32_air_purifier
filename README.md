@@ -1,8 +1,26 @@
 # ESP32 Air Purifier Project
 
+## Table of Contents- [Overview](#overview)
+
+- [ESP32 Air Purifier Project](#esp32-air-purifier-project)
+  - [Table of Contents- Overview](#table-of-contents--overview)
+  - [Overview](#overview)
+  - [Features](#features)
+  - [Hardware Requirements](#hardware-requirements)
+  - [Software Requirements](#software-requirements)
+  - [Installation \& Setup](#installation--setup)
+  - [How to Use](#how-to-use)
+  - [System Architecture](#system-architecture)
+    - [Hardware Block Diagram](#hardware-block-diagram)
+    - [State Machine Diagram](#state-machine-diagram)
+    - [Class UML Diagram](#class-uml-diagram)
+  - [Troubleshooting](#troubleshooting)
+  - [Contributing](#contributing)
+  - [License](#license)
+
 ## Overview
 
-This project is designed to manage an air purifier system using an ESP32 microcontroller. It integrates multiple sensors, controls a fan (PWM/Digital), and interfaces with an LCD display.
+This project is designed to manage an air purifier system using an ESP32 microcontroller. It integrates multiple sensors, controls a fan (PWM/Digital), and interfaces with an LCD display. The system is designed for both standalone operation and remote monitoring.
 
 ## Features
 
@@ -68,110 +86,171 @@ This project is designed to manage an air purifier system using an ESP32 microco
 
 2. **Sensor Data Display:**  
    - The system alternates between showing BME280 data (temperature, humidity, pressure) and PMSensor data (PM1.0, PM2.5, PM10).
-   - The display automatically toggles views based on a timed interval.
+   - The display automatically toggles views based on a timed interval (5 seconds).
 
 3. **Fan and LED Operation:**  
    - The fan is controlled via digital or PWM signals based on the configuration in `FanConfig.h`.
-   - LED colors change to reflect air quality: green (good), blue (moderate), red (bad).
+   - Fan speed automatically adjusts based on particulate matter readings.
+   - LED colors change to reflect air quality: green (good, PM2.5 ≤ 12), blue (moderate, PM2.5 ≤ 35), red (bad, PM2.5 > 35).
 
 4. **User Interaction:**  
-   - **Short Press:** Toggles the display (switches between display views).
+   - **Short Press:** Toggles the display (switches between display enabled/disabled).
    - **Long Press (approx. 2 seconds):** Changes the system state (power on/off).
-   - Refer to the project’s state machine diagrams (e.g., in `# Air Purifier State Machine Diagram.md` and `button_state_machine.md`) for detailed control flow.
 
-## Diagrams
+## System Architecture
 
-Below are various diagrams for visualizing system components. You can add more diagram types or remove any that are unnecessary.
+### Hardware Block Diagram
+
+```mermaid
+graph TD
+    A[ESP32 MCU] -->|I2C| B[BME280 Sensor]
+    A -->|UART| C[PMSensor]
+    A -->|I2C| D[16x2 LCD Display]
+    A -->|PWM/Digital| E[Fan]
+    A -->|GPIO| F[RGB LED]
+    A -->|GPIO| G[Button]
+```
 
 ### State Machine Diagram
 
+The air purifier implements multiple state machines to manage different aspects of the system:
+
 ```mermaid
 stateDiagram-v2
-    [*] --> Initialization
-    Initialization --> Monitoring : begin() completes
-    Monitoring --> Alarm : Sensor error detected
-    Alarm --> Monitoring : Error resolved
-    Monitoring --> Shutdown : System disabled
-    Shutdown --> [*]
+    %% Main System State Machine
+    state "System State Machine" as SystemSM {
+        [*] --> Initialization
+        Initialization --> SystemEnabled : begin() completes
+        SystemEnabled --> SystemDisabled : Long button press (2s)
+        SystemDisabled --> SystemEnabled : Long button press (2s)
+    }
+    
+    %% Display State Machine
+    state "Display State Machine" as DisplaySM {
+        [*] --> DisplayEnabled
+        DisplayEnabled --> DisplayDisabled : Short button press when system enabled
+        DisplayDisabled --> DisplayEnabled : Short button press when system enabled
+        
+        state DisplayEnabled {
+            [*] --> BME280View
+            BME280View --> PMSensorView : Auto toggle (5s)
+            PMSensorView --> BME280View : Auto toggle (5s)
+        }
+    }
+    
+    %% LED Indicator State Machine
+    state "LED State Machine" as LEDSM {
+        [*] --> LEDEnabled
+        LEDEnabled --> LEDDisabled : System disabled
+        LEDDisabled --> LEDEnabled : System enabled
+        
+        state LEDEnabled {
+            [*] --> CheckPM25
+            CheckPM25 --> GreenLED : PM2.5 ≤ 12
+            CheckPM25 --> BlueLED : 12 < PM2.5 ≤ 35
+            CheckPM25 --> RedLED : PM2.5 > 35
+        }
+    }
+    
+    %% Fan Control State Machine
+    state "Fan Control State Machine" as FanSM {
+        [*] --> FanOff
+        FanOff --> FanAuto : System enabled
+        FanAuto --> FanOff : System disabled
+        
+        state FanAuto {
+            [*] --> CheckControlMethod
+            CheckControlMethod --> DigitalMode : controlMethod == DIGITAL
+            CheckControlMethod --> PWMMode : controlMethod == PWM
+            
+            state DigitalMode {
+                [*] --> CheckAirQualityDigital
+                CheckAirQualityDigital --> FanOn : PM2.5 > 12
+                CheckAirQualityDigital --> FanOff : PM2.5 ≤ 12
+            }
+            
+            state PWMMode {
+                [*] --> CheckAirQualityPWM
+                CheckAirQualityPWM --> FanLowSpeed : 12 < PM2.5 ≤35
+                CheckAirQualityPWM --> FanHighSpeed : PM2.5 >35
+                CheckAirQualityPWM --> FanOff : PM2.5 ≤12
+            }
+        }
+    }
 ```
+
+The system implements these interconnected state machines to manage the display, LED indicators, and fan control based on sensor readings and user input. The button interface uses both short presses (to toggle display state) and long presses (to toggle system power).
 
 ### Class UML Diagram
 
 ```mermaid
 classDiagram
     class AirPurifier {
-        +begin()
-        +update()
-        +readSensors()
-        +updateFan()
-        +updateDisplay()
-        +handleButton()
-        +debugOutput()
+        +begin(): void
+        +update(): void
+        -readSensors(): void
+        -updateFan(): void
+        -updateDisplay(): void
+        -handleButton(): void
+        -updateLED(): void
+        -debugOutput(): void
+        -displayBME280Data(): void
+        -displayPMData(): void
     }
+    
     class PMSensor {
-        +begin(baudRate)
-        +read() : bool
-        +getPM1() : unsigned int
-        +getPM2_5() : unsigned int
-        +getPM10() : unsigned int
-        +printData()
+        +begin(baudRate: int): void
+        +read(): bool
+        +getPM1(): uint
+        +getPM2_5(): uint
+        +getPM10(): uint
+        +printData(): void
     }
+    
     class FanConfig {
-        <<static>>
-        +SPEED_MIN : int
-        +SPEED_MAX : int
-        +PWM_CHANNEL : int
-        +PWM_FREQ : int
-        +PWM_RESOLUTION : int
-        +controlMethod : FanControlMethod
-        +polarity : FanPolarity
+        +$SPEED_MIN: int
+        +$SPEED_MAX: int
+        +$PWM_CHANNEL: int
+        +$PWM_FREQ: int
+        +$PWM_RESOLUTION: int
+        +controlMethod: FanControlMethod
+        +polarity: FanPolarity
     }
+    
+    class EnvData {
+        +temperature: float
+        +pressure: float
+        +humidity: float
+        +altitude: float
+        +pm1_0: int
+        +pm2_5: int
+        +pm10: int
+    }
+    
+    AirPurifier *-- EnvData : composition
     AirPurifier --> PMSensor : uses
-    AirPurifier --> FanConfig : uses
-```
-
-### Flow Diagram
-
-```mermaid
-flowchart TD
-    A[Start] --> B[Initialize System]
-    B --> C[Read Sensors]
-    C --> D{Sensors Valid?}
-    D -- Yes --> E[Update Display & Fan]
-    D -- No --> F[Output Error]
-    E --> G[Debug Output]
-    F --> G
-    G --> H[Loop Back]
-    H --> C
-```
-
-### Tree Diagram (Project Structure)
-
-```plaintext
-.
-├── include
-│   └── PMSensor.h
-├── src
-│   ├── AirPurifier.cpp
-│   ├── FanConfig.cpp
-│   ├── main.cpp
-│   └── PMSensor.cpp
-└── platformio.ini
+    AirPurifier ..> FanConfig : dependency
+    AirPurifier ..> LiquidCrystal_I2C : dependency
+    AirPurifier ..> Adafruit_BME280 : dependency
 ```
 
 ## Troubleshooting
 
 - **Sensor Detection Issues:**  
-  If the BME280 does not initialize, check the wiring and ensure the correct I2C address.
+  If the BME280 does not initialize, check the wiring and ensure the correct I2C address (0x76 used in this project).
 - **Display Problems:**  
-  Verify the I2C LCD address and connection.
+  Verify the I2C LCD address (0x27 used in this project) and connection.
 - **Fan Control:**  
-  Confirm PWM channel and polarity settings in the fan configuration header.
+  Confirm PWM channel and polarity settings in the fan configuration header. The system supports both ACTIVE_HIGH and ACTIVE_LOW fan polarities.
 - **Button Responsiveness:**  
-  Adjust debounce timing in code if necessary.
+  If button is not responsive, adjust debounce timing in TimingConfig (currently set to 50ms debounce delay).
+- **Particulate Matter Readings:**  
+  If PM sensor readings are inconsistent, check serial connections and ensure the sensor is properly powered.
 
-## Additional Information
+## Contributing
 
-For further details and design insights, refer to the accompanying state machine diagrams and documentation files in the project folder.
+Contributions are welcome! Please fork the repository, create a feature branch, and submit a pull request with your changes.
 
-Happy building!
+## License
+
+This project is licensed under the MIT License.
