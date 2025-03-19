@@ -25,27 +25,36 @@ const unsigned long TimingConfig::DISPLAY_INTERVAL = 5000;
 const unsigned long TimingConfig::DEBOUNCE_DELAY = 50;
 const unsigned long TimingConfig::HOLD_DURATION = 2000;
 
+// This file implements the AirPurifier class including sensor initialization,
+// display updates, FAN/LED control logic, and user input handling.
+// Additional comments have been added for future maintainability.
+
 AirPurifier::AirPurifier()
     : lcd(0x27, 16, 2), pmSensor(PinConfig::PM_SENSOR_RX, PinConfig::PM_SENSOR_TX),
       systemEnabled(true), displayEnabled(true), ledEnabled(true), autoFanControl(true),
       currentDisplay(DisplayState::BME280), currentFanSpeed(0), 
       isPwmAttached(false), previousControlMethod(FanControlMethod::DIGITAL),
       lastSensorRead(0), lastDebugOutput(0), lastButtonCheck(0), lastDisplayChange(0),
-      lastButtonState(HIGH), buttonPressStartTime(0), lastDebounceTime(0) {}
+      lastButtonState(HIGH), buttonPressStartTime(0), lastDebounceTime(0) 
+{
+    // Constructor: Initializes member variables.
+}
 
 void AirPurifier::begin()
 {
+    // Initialize hardware peripherals: LCD, serial sensors and LED pins.
     lcd.init();
     lcd.clear();
     lcd.home();
     lcd.print("Initializing...");
     lcd.backlight();
+
     pmSensor.begin(9600);
     if (!bme.begin(0x76))
     {
         Serial.println("Could not find a valid BME280 sensor, check wiring!");
         while (1)
-            ;
+            ; // Halt if sensor initialization fails.
     }
     lcd.clear();
     lcd.home();
@@ -55,31 +64,28 @@ void AirPurifier::begin()
     for (int i = 0; i < 3; i++)
     {
         pinMode(PinConfig::RGB_LED[i], OUTPUT);
-        digitalWrite(PinConfig::RGB_LED[i], LOW); // Set RGB LED to OFF (active-high wiring)
+        digitalWrite(PinConfig::RGB_LED[i], LOW); // Ensure RGB LED starts OFF.
     }
 
     pinMode(PinConfig::BUTTON, INPUT);
     pinMode(PinConfig::FAN, OUTPUT);
     
-    // Ensure fan is OFF at startup using the current control method.
+    // Set the initial state of the fan based on control method & polarity.
     if (FanConfig::controlMethod == FanControlMethod::DIGITAL) {
-        // Digital mode: set fan state based on polarity (active low: off = HIGH, active high: off = LOW)
         digitalWrite(PinConfig::FAN, (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? HIGH : LOW);
         isPwmAttached = false;
     } else {
-        // PWM mode
         ledcSetup(FanConfig::PWM_CHANNEL, FanConfig::PWM_FREQ, FanConfig::PWM_RESOLUTION);
         ledcAttachPin(PinConfig::FAN, FanConfig::PWM_CHANNEL);
-        // Initialize PWM to off state based on polarity
         int offValue = (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? 255 : 0;
         ledcWrite(FanConfig::PWM_CHANNEL, offValue);
         isPwmAttached = true;
     }
     
-    // Track the current fan control method.
+    // Save current fan control method.
     previousControlMethod = FanConfig::controlMethod;
     
-    // Initial debug output for fan configuration
+    // Debug output: show fan configuration.
     Serial.print("Fan initialized: ");
     Serial.print(FanConfig::controlMethod == FanControlMethod::DIGITAL ? "DIGITAL" : "PWM");
     Serial.print(", Polarity: ");
@@ -88,6 +94,7 @@ void AirPurifier::begin()
 
 void AirPurifier::update()
 {
+    // Main update loop: handle button events, sensor readings and peripheral updates.
     const unsigned long currentMillis = millis();
 
     if ((currentMillis - lastButtonCheck) >= TimingConfig::BUTTON_CHECK_INTERVAL)
@@ -124,6 +131,7 @@ void AirPurifier::update()
 
 void AirPurifier::readSensors()
 {
+    // Read and update environmental sensor data.
     float temp = bme.readTemperature();
     float pres = bme.readPressure();
     float hum = bme.readHumidity();
@@ -174,6 +182,7 @@ void AirPurifier::readSensors()
 
 void AirPurifier::updateDisplay()
 {
+    // Periodically toggle between different display states.
     unsigned long currentMillis = millis();
 
     if (currentMillis - lastDisplayChange >= TimingConfig::DISPLAY_INTERVAL)
@@ -197,6 +206,7 @@ void AirPurifier::updateDisplay()
 
 void AirPurifier::handleButton()
 {
+    // Debounce and process button presses to control display and system state.
     int reading = digitalRead(PinConfig::BUTTON);
 
     if (reading != lastButtonState)
@@ -218,12 +228,12 @@ void AirPurifier::handleButton()
                     if (displayEnabled)
                     {
                         lcd.backlight();
-                        lastDisplayChange = 0; // Reset timer to force updateDisplay() to refresh
-                        updateDisplay();       // Force an immediate update
+                        lastDisplayChange = 0; // Force display update immediately.
+                        updateDisplay();
                     }
                     else
                     {
-                        lcd.clear(); // Clear display before turning off
+                        lcd.clear(); // Clear display when turning off.
                         lcd.noBacklight();
                     }
                 }
@@ -242,13 +252,13 @@ void AirPurifier::handleButton()
             {
                 displayEnabled = false;
                 ledEnabled = false;
-                lcd.clear(); // Clear display before turning off
+                lcd.clear();
                 lcd.noBacklight();
-                // Turn off LEDs (LOW for active-high)
+                // Turn off LEDs.
                 digitalWrite(PinConfig::RGB_LED[0], LOW);
                 digitalWrite(PinConfig::RGB_LED[1], LOW);
                 digitalWrite(PinConfig::RGB_LED[2], LOW);
-                // Detach PWM and turn off fan based on polarity
+                // Detach PWM and turn off fan.
                 ledcDetachPin(PinConfig::FAN);
                 digitalWrite(PinConfig::FAN, (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? HIGH : LOW);
             }
@@ -257,12 +267,11 @@ void AirPurifier::handleButton()
                 displayEnabled = true;
                 ledEnabled = true;
                 lcd.backlight();
-                lastDisplayChange = 0; // Force immediate update after re-enabling display
-                updateDisplay();       // Force an immediate update
-                // Reattach appropriate control method to the fan
+                lastDisplayChange = 0;
+                updateDisplay();
+                // Restore fan control if required.
                 if (FanConfig::controlMethod == FanControlMethod::PWM) {
                     ledcAttachPin(PinConfig::FAN, FanConfig::PWM_CHANNEL);
-                    // Initialize PWM to off value
                     int offValue = (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? 255 : 0;
                     ledcWrite(FanConfig::PWM_CHANNEL, offValue);
                 }
@@ -280,11 +289,11 @@ void AirPurifier::handleButton()
 
 void AirPurifier::updateLED()
 {
+    // Update the RGB LED color based on the PM2.5 level.
     int pm25 = envData.pm2_5;
 
     if (!ledEnabled)
     {
-        // Turn off all LEDs (LOW for active-high)
         digitalWrite(PinConfig::RGB_LED[0], LOW);
         digitalWrite(PinConfig::RGB_LED[1], LOW);
         digitalWrite(PinConfig::RGB_LED[2], LOW);
@@ -292,35 +301,30 @@ void AirPurifier::updateLED()
     }
 
     RGB color;
-
-    // Set colors based on PM2.5 levels
     if (pm25 <= AirQualityConfig::PM25_GOOD)
     {
-        // Good - Green
+        // Good quality - Green.
         color = {0, 255, 0};
     }
     else if (pm25 <= AirQualityConfig::PM25_MODERATE)
     {
-        // Moderate - Blue
+        // Moderate quality - Blue.
         color = {0, 0, 255};
     }
     else
     {
-        // Bad - Red
+        // Poor quality - Red.
         color = {255, 0, 0};
     }
 
-    // For active-high LED, write HIGH to turn ON, LOW to turn OFF
-    digitalWrite(PinConfig::RGB_LED[0], (color.r > 128) ? HIGH : LOW); // R
-    digitalWrite(PinConfig::RGB_LED[1], (color.g > 128) ? HIGH : LOW); // G
-    digitalWrite(PinConfig::RGB_LED[2], (color.b > 128) ? HIGH : LOW); // B
+    digitalWrite(PinConfig::RGB_LED[0], (color.r > 128) ? HIGH : LOW);
+    digitalWrite(PinConfig::RGB_LED[1], (color.g > 128) ? HIGH : LOW);
+    digitalWrite(PinConfig::RGB_LED[2], (color.b > 128) ? HIGH : LOW);
 }
-
-// No need for any definitions or forward declarations here as they are at the top of the file
 
 void AirPurifier::updateFan()
 {
-    // Detect change in fan control method and reinitialize if required.
+    // Adjust fan speed or turn it off based on sensor readings and control mode.
     if (previousControlMethod != FanConfig::controlMethod) {
         if (isPwmAttached) {
             ledcDetachPin(PinConfig::FAN);
@@ -332,7 +336,7 @@ void AirPurifier::updateFan()
 
     if (!systemEnabled || !autoFanControl)
     {
-        // Set fan OFF per configured control mode.
+        // Turn fan OFF based on the control mode.
         if (FanConfig::controlMethod == FanControlMethod::PWM)
         {
             if (!isPwmAttached) {
@@ -374,13 +378,9 @@ void AirPurifier::updateFan()
         else
         {
             if (FanConfig::polarity == FanPolarity::ACTIVE_LOW)
-            {
                 pwmValue = map(maxPM, 0, 300, 0, 255);
-            }
             else
-            {
                 pwmValue = map(maxPM, 0, 300, 255, 0);
-            }
             pwmValue = constrain(pwmValue, 0, 255);
         }
         ledcWrite(FanConfig::PWM_CHANNEL, pwmValue);
@@ -394,19 +394,16 @@ void AirPurifier::updateFan()
         }
         int digitalValue;
         if (maxPM <= AirQualityConfig::PM25_GOOD)
-        {
             digitalValue = (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? HIGH : LOW;
-        }
         else
-        {
             digitalValue = (FanConfig::polarity == FanPolarity::ACTIVE_LOW) ? LOW : HIGH;
-        }
         digitalWrite(PinConfig::FAN, digitalValue);
     }
 }
 
 void AirPurifier::debugOutput()
 {
+    // Print environmental data to the serial monitor for debugging.
     Serial.print("Temperature = ");
     Serial.print(envData.temperature);
     Serial.println(" *C");
@@ -433,6 +430,7 @@ void AirPurifier::debugOutput()
 
 void AirPurifier::displayBME280Data()
 {
+    // Update LCD to display temperature, humidity, and pressure data.
     lcd.clear();
     lcd.home();
     lcd.setCursor(0, 0);
@@ -447,6 +445,7 @@ void AirPurifier::displayBME280Data()
 
 void AirPurifier::displayPMData()
 {
+    // Update LCD to display particulate matter (PM) values.
     lcd.clear();
     lcd.home();
     lcd.setCursor(0, 0);
