@@ -1,22 +1,19 @@
 # ESP32 Air Purifier Project
 
-## Table of Contents- [Overview](#overview)
-
-- [ESP32 Air Purifier Project](#esp32-air-purifier-project)
-  - [Table of Contents- Overview](#table-of-contents--overview)
-  - [Overview](#overview)
-  - [Features](#features)
-  - [Hardware Requirements](#hardware-requirements)
-  - [Software Requirements](#software-requirements)
-  - [Installation \& Setup](#installation--setup)
-  - [How to Use](#how-to-use)
-  - [System Architecture](#system-architecture)
-    - [Hardware Block Diagram](#hardware-block-diagram)
-    - [State Machine Diagram](#state-machine-diagram)
-    - [Class UML Diagram](#class-uml-diagram)
-  - [Troubleshooting](#troubleshooting)
-  - [Contributing](#contributing)
-  - [License](#license)
+## Table of Contents
+- [Overview](#overview)
+- [Features](#features)
+- [Hardware Requirements](#hardware-requirements)
+- [Software Requirements](#software-requirements)
+- [Installation & Setup](#installation--setup)
+- [How to Use](#how-to-use)
+- [System Architecture](#system-architecture)
+  - [Hardware Block Diagram](#hardware-block-diagram)
+  - [State Machine Diagram](#state-machine-diagram)
+  - [Class UML Diagram](#class-uml-diagram)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Overview
 
@@ -39,14 +36,16 @@ This project is designed to manage an air purifier system using an ESP32 microco
 - Particulate Matter sensor (PMSensor)
 - I2C LiquidCrystal display (16x2)
 - RGB LED module (with pin order: Green, Blue, Red)
-- Fan (compatible with digital and PWM control)
+- **If using a DC motor, I recommend using PWM controller support.**
+- **If using an AC motor, I recommend using a VFD with PWM control.**
+- **If using just a relay with an AC/DC motor, you must use Digital Mode. The fan speed will be fixed at full speed while the fan is turned on, and you will only have on/off control without RPM adjustment.**
 - Button for user input and debouncing circuitry (if needed)
 - Appropriate wiring and power supply
 
 ## Software Requirements
 
-- PlatformIO installed on your Windows machine with Visual Studio Code
-- Arduino framework for ESP32
+- PlatformIO installed on your Windows machine with Visual Studio Code.
+- Arduino framework for ESP32.
 - Required libraries (specified in `platformio.ini`):
   - LiquidCrystal_I2C
   - Adafruit BME280 Library
@@ -90,12 +89,12 @@ This project is designed to manage an air purifier system using an ESP32 microco
 
 3. **Fan and LED Operation:**  
    - The fan is controlled via digital or PWM signals based on the configuration in `FanConfig.h`.
-   - Fan speed automatically adjusts based on particulate matter readings.
+   - The fan speed automatically adjusts based on particulate matter readings.
    - LED colors change to reflect air quality: green (good, PM2.5 ≤ 12), blue (moderate, PM2.5 ≤ 35), red (bad, PM2.5 > 35).
 
 4. **User Interaction:**  
    - **Short Press:** Toggles the display (switches between display enabled/disabled).
-   - **Long Press (approx. 2 seconds):** Changes the system state (power on/off).
+   - **Long Press (approximately 2 seconds):** Changes the system state (power on/off).
 
 ## System Architecture
 
@@ -171,10 +170,8 @@ stateDiagram-v2
     direction LR
     
     state "Fan Control State Machine" as FanSM {
-        [*] --> FanOff : Initial state
-        FanOff --> FanAuto : System enabled
-        FanAuto --> FanOff : System disabled
-        
+
+
         state FanAuto {
             [*] --> CheckControlMethod
             CheckControlMethod --> DigitalMode : DIGITAL
@@ -183,14 +180,14 @@ stateDiagram-v2
             state DigitalMode {
                 [*] --> CheckAirQualityDigital
                 CheckAirQualityDigital --> FanOn : PM2.5 > 12
-                CheckAirQualityDigital --> FanOff : PM2.5 ≤ 12
+                CheckAirQualityDigital --> FanOffDigital : PM2.5 ≤ 12
             }
             
             state PWMMode {
                 [*] --> CheckAirQualityPWM
                 CheckAirQualityPWM --> FanLowSpeed : 12 < PM2.5 ≤ 35
                 CheckAirQualityPWM --> FanHighSpeed : PM2.5 > 35
-                CheckAirQualityPWM --> FanOff : PM2.5 ≤ 12
+                CheckAirQualityPWM --> FanOffPWM : PM2.5 ≤ 12
             }
         }
     }
