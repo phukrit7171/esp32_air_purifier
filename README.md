@@ -183,15 +183,15 @@ stateDiagram-v2
             
             state DigitalMode {
                 [*] --> CheckAirQualityDigital
-                CheckAirQualityDigital --> FanOn : PMMax > 12
-                CheckAirQualityDigital --> FanOffDigital : PMMax ≤ 12
+                CheckAirQualityDigital --> FanOn : maxPM > 12
+                CheckAirQualityDigital --> FanOffDigital : maxPM ≤ 12
             }
             
             state PWMMode {
                 [*] --> CheckAirQualityPWM
-                CheckAirQualityPWM --> FanLowSpeed : 12 < PM2.5 ≤ 35
-                CheckAirQualityPWM --> FanHighSpeed : PM2.5 > 35
-                CheckAirQualityPWM --> FanOffPWM : PM2.5 ≤ 12
+                CheckAirQualityPWM --> FanLowSpeed : 12 < maxPM ≤ 35
+                CheckAirQualityPWM --> FanHighSpeed : maxPM > 35
+                CheckAirQualityPWM --> FanOffPWM : maxPM ≤ 12
             }
         }
     }
