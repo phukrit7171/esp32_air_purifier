@@ -183,8 +183,8 @@ stateDiagram-v2
             
             state DigitalMode {
                 [*] --> CheckAirQualityDigital
-                CheckAirQualityDigital --> FanOn : PM2.5 > 12
-                CheckAirQualityDigital --> FanOffDigital : PM2.5 ≤ 12
+                CheckAirQualityDigital --> FanOn : PMMax > 12
+                CheckAirQualityDigital --> FanOffDigital : PMMax ≤ 12
             }
             
             state PWMMode {
